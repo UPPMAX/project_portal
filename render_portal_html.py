@@ -17,7 +17,7 @@ from distutils.dir_util import copy_tree
 def main():
 
     # make settings global
-    global root_dir, web_root, portal_root, proj_list, environment, projects, project_sizes, all_projects_piechart
+    global root_dir, web_root, portal_root, proj_list, environment, projects, project_sizes, all_projects_piechart, project_stats
 
     # get arguemnts
     root_dir = sys.argv[1]
@@ -44,16 +44,24 @@ def main():
 
     #pdb.set_trace()
 
+
     # Sum all exts to get disk usage per project
+    project_stats = {}
     project_sizes = {}
     for project, users in projects.items():
 
         # init
+        project_stats[project] = {"size":1, "freq":0} # to avoid division by zero later on
         project_sizes[project] = 1 # to avoid division by zero later on
 
         for user in users:
 
             # get all ext sizes TODO: will location give the same answer? less work to add 2 numbers :)
+            # Looping over exts to get size AND number of files. Smart solution earlier Martin.
+            for size, freq in users[user]['exts'].values():
+                project_stats[project]['size'] += size
+                project_stats[project]['freq'] += freq
+
             for size, freq in users[user]['locations'].values():
                 project_sizes[project] += size
 
@@ -112,8 +120,8 @@ def render_main_page():
     data = {'title' : "UPPMAX Project Portal",
             'projid' : "snic2022-6-147",
             'web_root' : ".",
-            'project_sizes' : project_sizes,
             'all_projects_piechart' : all_projects_piechart,
+            'project_stats' : project_stats,
            }
 
     render_page("main_page.html", f"{web_root}/index.html", data)

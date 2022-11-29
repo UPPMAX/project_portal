@@ -10,7 +10,7 @@
                     </div>
                 </div>
                 <div class="row gx-5 align-items-center justify-content-center">
-                    _ 
+                    &nbsp; 
                 </div>
             </header>
 
@@ -59,19 +59,19 @@
                     </div>
                     <div class="row gx-5">
                         <table id="datatable" class="table table-striped table-bordered" style="width:100%">
-                            <thead>
+                            <thead
                                 <tr>
                                     <td>Project</td>
                                     <td>Storage usage</td>
-                                    <td>Storage usage bytes</td>
+                                    <td>Number of files</td>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for project, size in project_sizes | dictsort(by='value', reverse=True) %}
+                                {% for project_name, stats in project_stats.items() | sort(attribute='1.size') %}
                                 <tr>
-                                    <td><a href="projects/{{project}}">{{ project }}</a></td>
-                                    <td>{{ size | filesizeformat(binary=True) }}</td>
-                                    <td>{{ size }}</td>
+                                    <td><a href="projects/{{project_name}}">{{ project_name }}</a></td>
+                                    <td data-order="{{ stats['size'] }}">{{ stats['size'] | filesizeformat(binary=True) }}</td>
+                                    <td>{{ stats['freq'] }}</td>
                                 </tr>
                                 {% endfor %}
 

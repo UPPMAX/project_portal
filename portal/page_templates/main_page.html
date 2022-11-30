@@ -3,15 +3,15 @@
 {% block header %}
 
 
-            <header class="bg-dark py-10">
-                <div class="row gx-5 align-items-center justify-content-center">
-                    <div class="col-xl-10 col-xxl-10 d-xl-block text-center">
-                        <img class="img-fluid rounded-3 my-10" src={{ all_projects_piechart  }}  alt="..." />
+            <header class="py-10">
+                <div class="row gx-12 align-items-center justify-content-center">
+
+                    {% for suffix in plot_suffixes %}
+                    <div class="col-xl-4 col-xxl-4 d-xl-block text-center">
+                        <img class="img-fluid rounded-3 my-4" src="{{ image_prefix + "_" + suffix + ".png" }}"  alt="..." />
                     </div>
-                </div>
-                <div class="row gx-5 align-items-center justify-content-center">
-                    &nbsp; 
-                </div>
+                    {% endfor %}
+
             </header>
 
 {% endblock header %}

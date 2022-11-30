@@ -17,7 +17,15 @@ from distutils.dir_util import copy_tree
 def main():
 
     # make settings global
-    global root_dir, web_root, portal_root, proj_list, environment, projects, project_sizes, all_projects_piechart, project_stats
+    global root_dir
+    global web_root
+    global portal_root
+    global proj_list
+    global environment
+    global projects
+    global project_sizes
+    global project_stats
+    global plot_suffixes
 
     # get arguemnts
     root_dir = sys.argv[1]
@@ -27,13 +35,13 @@ def main():
     # init
     portal_root = f"{os.path.dirname(os.path.realpath(__file__))}/portal"
     environment = jinja2.Environment(loader=jinja2.FileSystemLoader(f"{portal_root}/page_templates/"))
+    plot_suffixes = ['total_size', 'total_freq', 'year', 'ext_size', 'ext_freq', 'location']
 
     # create folder structure
     copy_tree(f"{portal_root}/site_template", f"{web_root}")
-    copy_tree(f"{root_dir}/plots/", f"{web_root}/plots/")
+    copy_tree(f"{root_dir}/plots_web/", f"{web_root}/projects/")
 
     # paths
-    all_projects_piechart = "/plots/all_projects_piechart.png"
 
     # get proj list TODO: use this list or use projects.keys() for project ids? the differ in length
     proj_list = get_projids()
@@ -118,10 +126,10 @@ def render_main_page():
     """
     # create data object
     data = {'title' : "UPPMAX Project Portal",
-            'projid' : "snic2022-6-147",
             'web_root' : ".",
-            'all_projects_piechart' : all_projects_piechart,
+            'image_prefix' : "projects/all_projects",
             'project_stats' : project_stats,
+            'plot_suffixes' : plot_suffixes,
            }
 
     render_page("main_page.html", f"{web_root}/index.html", data)
@@ -149,11 +157,12 @@ def render_project_page(proj_id):
 
     # create data object
     data = {'title' : "UPPMAX Project Portal",
-            'projid' : proj_id,
+            'proj_id' : proj_id,
             'web_root' : "../../",
             'subtitle' : f' - {proj_id}',
             'user_size' : user_size,
             'project_size' : project_size,
+            'plot_suffixes' : plot_suffixes[2:],
            }
 
     os.makedirs(f"{web_root}/projects/{proj_id}", exist_ok=True)

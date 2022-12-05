@@ -25,7 +25,8 @@ def main():
     global projects
     global project_sizes
     global project_stats
-    global plot_suffixes
+    global main_page_plot_suffixes
+    global project_page_plot_suffixes
 
     # get arguemnts
     root_dir = sys.argv[1]
@@ -35,7 +36,8 @@ def main():
     # init
     portal_root = f"{os.path.dirname(os.path.realpath(__file__))}/portal"
     environment = jinja2.Environment(loader=jinja2.FileSystemLoader(f"{portal_root}/page_templates/"))
-    plot_suffixes = ['total_size', 'total_freq', 'year', 'ext_size', 'ext_freq', 'location']
+    main_page_plot_suffixes = ['total_size', 'total_freq', 'year', 'ext_size', 'ext_freq', 'location']
+    project_page_plot_suffixes = ['year', 'ext_size', 'ext_freq', 'location', 'mean_efficiency']
 
     # create folder structure
     copy_tree(f"{portal_root}/site_template", f"{web_root}")
@@ -43,14 +45,14 @@ def main():
 
     # paths
 
-    # get proj list TODO: use this list or use projects.keys() for project ids? the differ in length
+    # get proj list TODO: this only lists projects that have project folders. some compute projects don't have that. loop over some other project list instead, supAPI?
     proj_list = get_projids()
 
     # import users json object
     with open(f"{root_dir}/data_dump.json") as json_file:
         projects = json.load(json_file)
 
-    #pdb.set_trace()
+    pdb.set_trace()
 
 
     # Sum all exts to get disk usage per project
@@ -111,11 +113,11 @@ def get_projids():
 
     # get all unique projids
     projids = set()
-    for csv_file in os.listdir(f"{root_dir}/csv/"): # TODO change to json dir
+    for csv_file in os.listdir(f"{root_dir}/tmp/"): # TODO change to json dir
         projids.add(csv_file.split(".")[0])
 
     # Remove summary csvs. E.g. all_extensions_size.csv
-    projids = [a for a in projids if not re.search('^all_', a)]
+    projids = [a for a in projids if not re.search('^all', a)]
 
     return list(projids)
 
@@ -129,7 +131,7 @@ def render_main_page():
             'web_root' : ".",
             'image_prefix' : "projects/all_projects",
             'project_stats' : project_stats,
-            'plot_suffixes' : plot_suffixes,
+            'plot_suffixes' : main_page_plot_suffixes,
            }
 
     render_page("main_page.html", f"{web_root}/index.html", data)
@@ -162,7 +164,7 @@ def render_project_page(proj_id):
             'subtitle' : f' - {proj_id}',
             'user_size' : user_size,
             'project_size' : project_size,
-            'plot_suffixes' : plot_suffixes[2:],
+            'plot_suffixes' : project_page_plot_suffixes,
            }
 
     os.makedirs(f"{web_root}/projects/{proj_id}", exist_ok=True)

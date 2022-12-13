@@ -1,5 +1,5 @@
 #!/bin/env python
-
+# -*- coding: utf-8 -*-
 
 import requests
 import os
@@ -9,12 +9,26 @@ import pdb
 import logging
 from pprint import pprint
 from datetime import datetime, timedelta
+import sqlite3
+import math
+import subprocess
+import re
+
 
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
     datefmt="%d/%b/%Y %H:%M:%S",
     stream=sys.stdout)
+
+
+def print_progress_bar(index, total, label):
+    n_bar = 50  # Progress bar width
+    progress = index / total
+    sys.stdout.write('\r')
+    sys.stdout.write(f"[{'=' * int(n_bar * progress):{n_bar}s}] {int(100 * progress)}%  {label}")
+    sys.stdout.flush()
+
 
 
 state = {}
@@ -28,7 +42,7 @@ state = {}
 #
 # SUP API
 
-if 1:
+if True:
     # fetch projects from api
     logging.info("Fetching projects from SUP API.")
     url = 'http://api.uppmax.uu.se:5000/api/v1/projects'
@@ -79,7 +93,6 @@ if True:
     # init
     resources = ["crex1.uppmax.uu.se", "crex2.uppmax.uu.se"] # TODO: can we get this list from SUPR?
     share = "PROJECT"
-    storage = {}
 
     # loop over all resources
     for resource in resources:
@@ -142,52 +155,172 @@ if True:
 #
 # COREHOURS
 
+# set limits
+corehour_period = 30
+clusters = ["rackham", "snowy"]
+
+period_end = datetime.now()
+period_start = period_end - timedelta(days=corehour_period)
+period_start_padded = period_start - timedelta(days=30)
+
 # for each cluster
+for cluster in clusters:
+
+
+    # connect to database
+    slurmdb = sqlite3.connect(f'/sw/share/compstore/production/statistics/dbs/slurm_accounting/{cluster}.sqlite')
+    slurmdb.row_factory = sqlite3.Row
+    slurmcur = slurmdb.cursor()
+    
+    # connect to database
+    effdb = sqlite3.connect(f'/sw/share/compstore/production/statistics/dbs/efficiency/{cluster}.sqlite')
+    effdb.row_factory = sqlite3.Row
+    effcur = effdb.cursor()
+
+    logging.info(f"Fetching {cluster} jobs from database.")
 
     # fetch all jobs overlapping the time period
+    query = f"SELECT proj_id, job_id, user, start, end, cores FROM slurm_accounting WHERE end>={period_start_padded.strftime('%s')}"
+    slurmcur.execute(query)
+    slurm_jobs_list = slurmcur.fetchall()
+    slurm_jobs = { job['job_id']:job for job in slurm_jobs_list}
 
-    # fetch efficiency data for all jobs overlapping the time period
+    # fetch all jobs overlapping the time period
+    query = f"SELECT proj_id, job_id, cpu_mean, mem_peak, mem_limit FROM efficiency WHERE date_finished>={period_start_padded.strftime('%Y-%m-%d')}"
+    effcur.execute(query)
+    eff_jobs_list = slurmcur.fetchall()
+    eff_jobs = { job['job_id']:job for job in eff_jobs_list}
 
-    # for each day in time period
     
-        # sum up corehours from all jobs running this day
+    logging.info("Fetching running {cluster} jobs from SLURM.")
+    # fetch all running jobs and add them to the slurm_jobs
+    running_jobs = subprocess.run(['squeue', '-M', cluster, '-t', 'R,CG', '-o', '"%i|%a|%u|%S|%C"'], stdout=subprocess.PIPE) 
 
-        # save to time line
+    # process each running job
+    for line in running_jobs.stdout.decode('utf-8').split("\n"):
+        match = re.search("(\d+)\|([\w\-]+)\|(\w+)\|([\w\-\:]+)\|(\d+)", line)
+        if match:
+            job_id, proj_id, user, start, cores = int(match.groups()[0]), match.groups()[1], match.groups()[2], int(datetime.strptime(match.groups()[3], "%Y-%m-%dT%H:%M:%S").timestamp()), int(match.groups()[4])
+            end = int(datetime.now().timestamp())
+            # construct a new job dict
+            slurm_jobs[job_id] = { 'proj_id':proj_id, 'job_id':job_id, 'user':user, 'start':start, 'end':end, 'cores':cores }
 
 
-    # summarize per user the used corehours and their efficiency
+    logging.info(f"Processing all {cluster} jobs.")
+    # for each job in time period
+    t0 = int(datetime.now().strftime("%s"))
+    corehour_plot = dict()
+    job_n = len(slurm_jobs)
+    counter = 0
+    for job_id, job in slurm_jobs.items():
+
+        # get datetime from job start and end epoch times
+        try:
+            job_start = datetime.fromtimestamp(job['start'])
+            job_end = datetime.fromtimestamp(job['end'])
+        except ValueError as e:
+            print(e)
+            continue
+
+        # day span
+        delta = job_end - job_start
+        for day in [job_start + timedelta(days=i) for i in range(delta.days + 1)]:
+
+            # how many hours of the job overlaps this day?
+            overlap_start = max(job['start'],   day.replace(hour=0,  minute=0,  second=0,  microsecond=000000).timestamp()) # max of job start and day start (epoch time)
+            overlap_end   = min(job['end'],     day.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp()) # min of job end   and day end   (epoch time)
+            overlap_hours = (overlap_end - overlap_start) /60 /60 # number of seconds converted to hours
+            day_str = day.strftime('%Y-%m-%d')
+
+
+            # save job in the project that ran it
+            try:
+                # add this jobs overlapping corehours to this day
+                state['projects'][job['proj_id']]['corehours'][cluster][day_str] += overlap_hours * job['cores'] 
+            except KeyError:
+
+                # it will fail the first time it sees the project
+                if 'corehours' not in state['projects'][job['proj_id']]:
+                    state['projects'][job['proj_id']]['corehours'] = {}
+                    state['projects'][job['proj_id']]['corehours'][cluster] = {}
+
+                # as well as first time seeing a recource
+                elif cluster not in state['projects'][job['proj_id']]['corehours']:
+                    state['projects'][job['proj_id']]['corehours'][cluster] = {}
+
+                # now the infrastructure should be in place to add the daily value
+                state['projects'][job['proj_id']]['corehours'][cluster][day_str] = overlap_hours * job['cores'] 
+
+        
+        # print progress
+        counter += 1
+        if counter % 10000 == 0:
+            print_progress_bar(counter, job_n, "Creating timeline from jobs")
+
+
+    t1 = int(datetime.now().strftime("%s"))
+    print(f"Per job:\t{t1 -t0}s")
+   
+    # convert daily corehour usage to a corehour timeline with 30 day memory
+    for project in [ proj for proj in state['projects'].values() if 'corehours' in proj ]:
+        
+        # skip this project if there are no corehours on this cluster
+        if cluster not in project['corehours']:
+            continue
+
+        daily_usages = project['corehours'][cluster]
+
+        # init timeline
+        corehour_timeline = [0] * (period_end - period_start_padded).days
+
+        # go through each day
+        for i,day in enumerate([ period_start_padded + timedelta(days=n) for n in range((period_end - period_start_padded).days) ]):
+
+            # create day string
+            day_str = day.strftime('%Y-%m-%d')
+            try:
+                # get daily usage, if any, otherwise 0
+                daily_usage = daily_usages.get(day_str, 0)
+            except Exception as e:
+                print(e)
+                pdb.set_trace()
+
+            # if there is any usage
+            if daily_usage:
+
+                # add the usage to all affected days
+                for j in range(i, min(i+30, len(corehour_timeline))):
+                    corehour_timeline[j] += daily_usage
+
+        state['projects'][project['Projectname']]['corehours'][cluster] = corehour_timeline
 
 
 
 
 
 
+    if False:
+        active_projects = [ proj for proj in state['projects'].values() if 'corehours' in proj ]
+        corehour_plot = active_projects[1]['corehours']['rackham']
+        # convert to timeline
+        y_vals = []
+        for day in [ period_start + timedelta(days=n) for n in range(corehour_period) ]:
+            daily_corehours = corehour_plot.get(day.strftime('%Y-%m-%d'), 0)
+            y_vals.append(daily_corehours)
 
 
-#url = "https://accounting.snic.se:6143/sgas/customquery/usage-summary?machine_name=rackham.uppmax.uu.se&from=2019-10-01&to=2019-11-01"
-#url = "https://accounting.snic.se:6143/sgas/customquery/usage?machine_name=rackham.uppmax.uu.se&from=2019-10-01&to=2019-11-01"
-projid       = "sllstore2017033"
-storage_sys  = "crex1.uppmax.uu.se"
-share        = "PROJECT"
-date_from    = "2022-12-01"
-date_to      = "2022-12-02"
-interval     = "day"
+        import matplotlib.pyplot as plt
+        plt.style.use('seaborn-whitegrid')
+        import numpy as np
 
-# summary
-# https://accounting.snic.se:6143/sgas/customquery/usage-summary?machine_name=<clustername(fqdn)>&from=<from>&to=<to>
-#url = f"https://accounting.snic.se:6143/sgas/customquery/usage-summary?machine_name={storage_sys}&from={date_from}&to={date_to}"
+        print(project['Projectname'])
+        fig = plt.figure()
+        ax = plt.axes()
+        ax.plot([ daily_usages.get((period_start_padded + timedelta(days=n)).strftime('%Y-%m-%d'), 0) for n in range((period_end - period_start_padded).days) ], label="daily usages")
+        ax.plot(corehour_timeline, label="timeline")
+        ax.legend()
+        plt.show()
 
-# project
-url = f"https://accounting.snic.se:6143/sgas/customquery/storage-snic-max-for-project?project_name=sllstore2017033&storage_system={storage_sys}&storage_share={share}&from={date_from}&to={date_to}&interval={interval}"
-
-# average usage per resource
-url = f'https://accounting.snic.se:6143/sgas/customquery/storage-snic-average?storage_system={storage_sys}&storage_share={share}&from={date_from}&to={date_to}'
-
-response     = requests.get(url, cert=cert)
-storage_data = response.json()
-
-print(storage_data)
-pdb.set_trace()
-
+        pdb.set_trace()
 
 

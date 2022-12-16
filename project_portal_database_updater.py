@@ -84,8 +84,8 @@ key_file_path   = f"{script_path}/cert/key.pem"
 cert            = (cert_file_path, key_file_path)
 ca_file_path    = f"{script_path}/cert/DigiCertCA.crt"
 
-#if True:
-if False:
+if True:
+#if False:
     # init
     resources = ["crex1.uppmax.uu.se", "crex2.uppmax.uu.se"] # TODO: can we get this list from SUPR?
     share = "PROJECT"
@@ -169,7 +169,7 @@ for cluster in clusters:
     logging.info(f"Fetching {cluster} jobs from database.")
 
     # fetch all jobs overlapping the time period
-    query = f"SELECT proj_id, job_id, user, start, end, cores FROM slurm_accounting WHERE end>={period_start_padded.strftime('%s')}"
+    query = f"SELECT proj_id, job_id, user, start, end, cores FROM slurm_accounting WHERE end>={period_start_padded.timestamp()}"
     slurmcur.execute(query)
     slurm_jobs_list = slurmcur.fetchall()
     slurm_jobs = { job['job_id']:dict(job) for job in slurm_jobs_list}
@@ -212,6 +212,7 @@ for cluster in clusters:
     counter = 0
     for job_id, job in slurm_jobs.items():
 
+
         # get datetime from job start and end epoch times
         try:
             job_start = datetime.fromtimestamp(job['start'])
@@ -222,7 +223,11 @@ for cluster in clusters:
 
         # day span
         delta = job_end - job_start
-        for day in [job_start + timedelta(days=i) for i in range(delta.days + 1)]:
+        for day in [job_start + timedelta(days=i) for i in range(delta.days + 2)]: # +2 since we miss some jobs otherwise 
+
+            # skip jobs that are completely outside of current day
+            if job['start'] > day.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp() or job['end'] < day.replace(hour=0,  minute=0,  second=0,  microsecond=000000).timestamp():
+                continue
 
             # how many hours of the job overlaps this day?
             overlap_start = max(job['start'],   day.replace(hour=0,  minute=0,  second=0,  microsecond=000000).timestamp()) # max of job start and day start (epoch time)
@@ -379,7 +384,7 @@ for cluster in clusters:
 
     t1 = int(datetime.now().strftime("%s"))
     print(f"\nUser corehours:\t{t1 -t0}s")
-#    pdb.set_trace()
+    #pdb.set_trace()
    
 
 
@@ -390,9 +395,9 @@ for cluster in clusters:
 # |_|   |___|_____|_____|____/___/____|_____|
 #
 # FILESIZE
-pdb.set_trace()
+#pdb.set_trace()
 # create a translation table from dirname to proj_id since SUP API will report project ids, not dirnames
-dirname_to_projid = { project['Directory_Name']:proj_id for proj_id, project in state['projects'].items() if 'Directory_Name' in project and project['Directory_Name'] != proj_id }
+dirname_to_projid = { project['Directory_Name']:proj_id for proj_id, project in state['projects'].items() if 'Directory_Name' in project }
 
 # fetch the filesize data
 filesize_data_filename = "/crex/proj/staff/bjornv/filesize/out_zst_incomplete.2/data_dump.json"

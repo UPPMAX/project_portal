@@ -52,7 +52,6 @@ def main():
     with open(f"{root_dir}/data_dump.json") as json_file:
         projects = json.load(json_file)
 
-    pdb.set_trace()
 
 
     # Sum all exts to get disk usage per project

@@ -78,13 +78,6 @@ for (cluster in clusters) {
                                   proj_cpu_eff = (sum_cpu_vol / sum_corehours),
                                   proj_mem_eff = (sum_mem_vol / sum_corehours))
 
-
-
-    
-
-
-
-
     # process each project
     for (project in projects) {
 
@@ -105,8 +98,6 @@ for (cluster in clusters) {
     #    mtext(project,3,outer=T,line=-2, adj=50)
         legend('topright', legend=c(project, "Other projects"), pch=21, col='black', pt.bg=c("red", "#00000050"), pt.cex=2)
         dev.off()
-
-        
     }
 }
 

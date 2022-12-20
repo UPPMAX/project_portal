@@ -371,21 +371,21 @@ for cluster in clusters:
         if counter % 10000 == 0:
             print_progress_bar(counter, job_n, "Creating timeline from jobs")
 
-
-    # go through all users and rescale their efficiency now that all jobs have been processed
-    for project_id in state['projects']:
-        if 'corehours' in state['projects'][project_id]:
-            for cluster in state['projects'][project_id]['corehours']:
-                if 'user' in state['projects'][project_id]['corehours'][cluster]:
-                    for user in state['projects'][project_id]['corehours'][cluster]['user']:
-
-                        # divice the efficiency by corehours to get the normalized efficiency
-                        state['projects'][project_id]['corehours'][cluster]['user'][user]['efficiency'] /= state['projects'][project_id]['corehours'][cluster]['user'][user]['corehours']
-
     t1 = int(datetime.now().strftime("%s"))
     print(f"\nUser corehours:\t{t1 -t0}s")
-    #pdb.set_trace()
+
+# go through all users and rescale their efficiency now that all jobs have been processed
+for project_id in state['projects']:
+    if 'corehours' in state['projects'][project_id]:
+        for cluster in state['projects'][project_id]['corehours']:
+            if 'user' in state['projects'][project_id]['corehours'][cluster]:
+                for user in state['projects'][project_id]['corehours'][cluster]['user']:
+
+                    # divice the efficiency by corehours to get the normalized efficiency
+                    state['projects'][project_id]['corehours'][cluster]['user'][user]['efficiency'] /= state['projects'][project_id]['corehours'][cluster]['user'][user]['corehours']
+
    
+    
 
 
 #  _____ ___ _     _____ ____ ___ __________
@@ -405,14 +405,51 @@ with open(filesize_data_filename, 'r') as filesize_data_file:
     filesize_data = json.load(filesize_data_file)
 
 # add filesize data to state
-for directory_name, proj_fs_data in filesize_data.items():
+state['projects'][proj_id]['filesize'] = {}
+for directory_name, users_fs_data in filesize_data.items():
+    
+    # skip empty data
+    if len(users_fs_data) == 0:
+        continue
     
     # if a projects has a custom directory name, we have to translate the directory name to a project id
     proj_id = directory_name
     if directory_name not in state['projects']:
         proj_id = dirname_to_projid[directory_name]
 
-    state['projects'][proj_id]['filesize'] = proj_fs_data
+    # add user based data
+    state['projects'][proj_id]['filesize'] = {}
+    state['projects'][proj_id]['filesize']['user'] = users_fs_data
+
+    # summarize user data to project data
+    proj_fs_data = {}
+    for user, user_data in users_fs_data.items():
+
+        for stat_type in ['exts', 'locations', 'years']:
+
+            # for all stats in user
+            for stat, size_freq in user_data[stat_type].items():
+
+                try:
+                    proj_fs_data[stat_type][stat][0] += size_freq[0]
+                    proj_fs_data[stat_type][stat][1] += size_freq[1]
+
+                except KeyError:
+                
+                    # will fail the first time
+                    if stat_type not in proj_fs_data:
+                        proj_fs_data[stat_type] = {}
+
+                    # create initial list for this stat
+                    proj_fs_data[stat_type][stat] = [size_freq[0], size_freq[1]]
+        
+
+            
+    # add project based data
+    state['projects'][proj_id]['filesize']['project'] = proj_fs_data
+
+
+
 
 
 
@@ -430,6 +467,7 @@ ppdb = sqlite3.connect(f'/sw/share/compstore/production/statistics/dbs/project_p
 ppcur = ppdb.cursor()
 
 for proj_id in state['projects']:
+    
     query = f"INSERT OR REPLACE INTO current_state VALUES (?, ?, ?)"
     ppcur.execute(query, [proj_id, json.dumps(state['projects'][proj_id]), datetime.now().strftime('%Y-%m-%d') ])
 

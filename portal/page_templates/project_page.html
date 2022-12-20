@@ -61,16 +61,20 @@
                             <thead>
                                 <tr>
                                     <td>User</td>
-                                    <td>Usage</td>
-                                    <td>%Project</td>
+                                    <td>Storage usage</td>
+                                    <td>Number of files</td>
+                                    <td>Corehours used</td>
+                                    <td>Efficiency</td>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for user, size in user_size | dictsort(by='value', reverse=True) %}
+                                {% for user in project_data['user'] sort %}
                                 <tr>
                                     <td>{{ user }}</td>
-                                    <td>{{ size | filesizeformat(binary=True) }}</td>
-                                    <td>{{ (size / project_size * 100) | round(precision=1) }}%</td>
+                                    <td data-order="{{ project_data['user'][user]['storage_size'] }}">{{ project_data['user'][user]['storage_size'] | filesizeformat(binary=True) }}</td>
+                                    <td data-order="{{ project_data['user'][user]['storage_freq'] }}">{{ project_data['user'][user]['storage_freq'] | pretty_number}}</td>
+                                    <td data-order="{{ project_data['user'][user]['ch_usage'] }}">{{ project_data['user'][user]['ch_usage']         | round(2) | pretty_number}}</td>
+                                    <td>{{ project_data['user'][user]['ch_eff'] | round(2) }}</td>
                                 </tr>
                                 {% endfor %}
 

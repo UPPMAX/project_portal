@@ -64,14 +64,18 @@
                                     <td>Project</td>
                                     <td>Storage usage</td>
                                     <td>Number of files</td>
+                                    <td>Corehours used</td>
+                                    <td>Efficiency</td>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for project_name, stats in project_stats.items() | sort(attribute='1.size') %}
+                                {% for project_name, stats in project_stats.items() | sort(attribute='1.storage_size') %}
                                 <tr>
                                     <td><a href="projects/{{project_name}}">{{ project_name }}</a></td>
-                                    <td data-order="{{ stats['size'] }}">{{ stats['size'] | filesizeformat(binary=True) }}</td>
-                                    <td>{{ stats['freq'] }}</td>
+                                    <td data-order="{{ stats['storage_size'] }}">{{ stats['storage_size'] | filesizeformat(binary=True) }}</td>
+                                    <td data-order="{{ stats['storage_freq'] }}">{{ stats['storage_freq'] | pretty_number }}</td>
+                                    <td data-order="{{ stats['ch_usage']     }}">{{ stats['ch_usage']     | round(2) | pretty_number }}</td>
+                                    <td>{{ stats['ch_eff'] | round(2) }}</td>
                                 </tr>
                                 {% endfor %}
 

@@ -6,9 +6,9 @@
             <header class="py-10">
                 <div class="row gx-12 align-items-center justify-content-center">
 
-                    {% for suffix in plot_suffixes %}
+                    {% for plot_file in plot_files %}
                     <div class="col-xl-4 col-xxl-4 d-xl-block text-center">
-                        <img class="img-fluid rounded-3 my-4" src="{{ image_prefix + "_" + suffix + ".png" }}"  alt="..." />
+                        <img class="img-fluid rounded-3 my-4" src="{{ plot_file }}"  alt="..." />
                     </div>
                     {% endfor %}
 

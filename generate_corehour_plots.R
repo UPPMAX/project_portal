@@ -33,10 +33,10 @@ for(cluster in clusters){
 #query <-  paste0("SELECT job_id, user, start, end, cores FROM slurm_accounting WHERE start > ", time_30d, " AND proj_id LIKE '%' AND end LIKE '%' AND cluster LIKE '%'") 
 
 # get project list
-projects <- list.files(paste0(root_dir, '/tmp/'))
-projects <- projects[grepl('years.csv', projects)]
-projects <- projects[projects != "all.years.csv"]
-projects <- sub('.years.csv','', projects)
+#projects <- list.files(paste0(root_dir, '/tmp/'))
+#projects <- projects[grepl('years.csv', projects)]
+#projects <- projects[projects != "all.years.csv"]
+#projects <- sub('.years.csv','', projects)
 
 
 # get all jobs for a project
@@ -79,6 +79,7 @@ for (cluster in clusters) {
                                   proj_mem_eff = (sum_mem_vol / sum_corehours))
 
     # process each project
+    projects <- unique(job_stats$proj_id)
     for (project in projects) {
 
         print(project)
@@ -87,7 +88,7 @@ for (cluster in clusters) {
         #jobs <- job_stats[job_stats$proj_id == project,]
 
         # create project folder if it does not exist yet
-        dir.create(file.path(web_root, "projects", project), showWarnings = FALSE)
+        dir.create(file.path(web_root, "projects", project), showWarnings = FALSE, recursive=T)
 
         png(paste0(web_root, "/projects/", project, "/", project, "_mean_efficiency.png"), width = 900, height = 900)
         par(las=1, cex=2)

@@ -61,7 +61,7 @@ if True:
     url = 'http://api.uppmax.uu.se:5000/api/v1/projects'
     logging.debug(f"Querying SUP: {url}")
     response = requests.get(url)
-    
+
     # load the json
     # got unicodeEncodeErrors when printing state, solved by export PYTHONIOENCODING="UTF-8" in bash
     state['projects'] = response.json()
@@ -94,7 +94,7 @@ if True:
     for resource in resources:
 
         # for each day in the date range
-        for date_to in [datetime.now() - timedelta(days=n) for n in range(30)]:
+        for date_to in [datetime.now() - timedelta(days=n) for n in range(400)]:
 
             # get day before date_to to give the api a 1 day window
             date_from = date_to - timedelta(days=1)
@@ -160,7 +160,7 @@ for cluster in clusters:
     slurmdb = sqlite3.connect(f'/sw/share/compstore/production/statistics/dbs/slurm_accounting/{cluster}.sqlite')
     slurmdb.row_factory = sqlite3.Row
     slurmcur = slurmdb.cursor()
-    
+
     # connect to database
     effdb = sqlite3.connect(f'/sw/share/compstore/production/statistics/dbs/efficiency/{cluster}.sqlite')
     effdb.row_factory = sqlite3.Row
@@ -180,10 +180,10 @@ for cluster in clusters:
     eff_jobs_list = effcur.fetchall()
     eff_jobs = { job['job_id']:dict(job) for job in eff_jobs_list}
 
-    
+
     logging.info("Fetching running {cluster} jobs from SLURM.")
     # fetch all running jobs and add them to the slurm_jobs
-    running_jobs = subprocess.run(['squeue', '-M', cluster, '-t', 'R,CG', '-o', '"%i|%a|%u|%S|%C"'], stdout=subprocess.PIPE) 
+    running_jobs = subprocess.run(['squeue', '-M', cluster, '-t', 'R,CG', '-o', '"%i|%a|%u|%S|%C"'], stdout=subprocess.PIPE)
 
     # process each running job
     for line in running_jobs.stdout.decode('utf-8').split("\n"):
@@ -223,7 +223,7 @@ for cluster in clusters:
 
         # day span
         delta = job_end - job_start
-        for day in [job_start + timedelta(days=i) for i in range(delta.days + 2)]: # +2 since we miss some jobs otherwise 
+        for day in [job_start + timedelta(days=i) for i in range(delta.days + 2)]: # +2 since we miss some jobs otherwise
 
             # skip jobs that are completely outside of current day
             if job['start'] > day.replace(hour=23, minute=59, second=59, microsecond=999999).timestamp() or job['end'] < day.replace(hour=0,  minute=0,  second=0,  microsecond=000000).timestamp():
@@ -239,7 +239,7 @@ for cluster in clusters:
             # save job in the project that ran it
             try:
                 # add this jobs overlapping corehours to this day
-                state['projects'][job['proj_id']]['corehours'][cluster]['daily_usage'][day_str] += overlap_hours * job['cores'] 
+                state['projects'][job['proj_id']]['corehours'][cluster]['daily_usage'][day_str] += overlap_hours * job['cores']
             except KeyError:
 
                 # it will fail the first time it sees the project
@@ -254,9 +254,9 @@ for cluster in clusters:
                     state['projects'][job['proj_id']]['corehours'][cluster]['daily_usage'] = {}
 
                 # now the infrastructure should be in place to add the daily value
-                state['projects'][job['proj_id']]['corehours'][cluster]['daily_usage'][day_str] = overlap_hours * job['cores'] 
+                state['projects'][job['proj_id']]['corehours'][cluster]['daily_usage'][day_str] = overlap_hours * job['cores']
 
-        
+
         # print progress
         counter += 1
         if counter % 10000 == 0:
@@ -265,10 +265,10 @@ for cluster in clusters:
 
     t1 = int(datetime.now().strftime("%s"))
     print(f"Per job:\t{t1 -t0}s")
-   
+
     # convert daily corehour usage to a corehour timeline with 30 day memory
     for project in [ proj for proj in state['projects'].values() if 'corehours' in proj ]:
-        
+
         # skip this project if there are no corehours on this cluster
         if cluster not in project['corehours']:
             continue
@@ -365,7 +365,7 @@ for cluster in clusters:
             state['projects'][job['proj_id']]['corehours'][cluster]['user'][job['user']]['corehours']  = overlap_hours * job['cores']
             state['projects'][job['proj_id']]['corehours'][cluster]['user'][job['user']]['efficiency'] = overlap_hours * job['cores'] * max(job['cpu_mean']/100, job['mem_peak']/job['mem_limit'])
 
-        
+
         # print progress
         counter += 1
         if counter % 10000 == 0:
@@ -384,8 +384,8 @@ for project_id in state['projects']:
                     # divice the efficiency by corehours to get the normalized efficiency
                     state['projects'][project_id]['corehours'][cluster]['user'][user]['efficiency'] /= state['projects'][project_id]['corehours'][cluster]['user'][user]['corehours']
 
-   
-    
+
+
 
 
 #  _____ ___ _     _____ ____ ___ __________
@@ -400,18 +400,18 @@ for project_id in state['projects']:
 dirname_to_projid = { project['Directory_Name']:proj_id for proj_id, project in state['projects'].items() if 'Directory_Name' in project }
 
 # fetch the filesize data
-filesize_data_filename = "/crex/proj/staff/bjornv/filesize/out_zst_incomplete.2/data_dump.json"
+filesize_data_filename = "/crex/proj/staff/bjornv/filesize/out.dirs.included/data_dump.json"
 with open(filesize_data_filename, 'r') as filesize_data_file:
     filesize_data = json.load(filesize_data_file)
 
 # add filesize data to state
 state['projects'][proj_id]['filesize'] = {}
 for directory_name, users_fs_data in filesize_data.items():
-    
+
     # skip empty data
     if len(users_fs_data) == 0:
         continue
-    
+
     # if a projects has a custom directory name, we have to translate the directory name to a project id
     proj_id = directory_name
     if directory_name not in state['projects']:
@@ -435,16 +435,16 @@ for directory_name, users_fs_data in filesize_data.items():
                     proj_fs_data[stat_type][stat][1] += size_freq[1]
 
                 except KeyError:
-                
+
                     # will fail the first time
                     if stat_type not in proj_fs_data:
                         proj_fs_data[stat_type] = {}
 
                     # create initial list for this stat
                     proj_fs_data[stat_type][stat] = [size_freq[0], size_freq[1]]
-        
 
-            
+
+
     # add project based data
     state['projects'][proj_id]['filesize']['project'] = proj_fs_data
 
@@ -467,7 +467,7 @@ ppdb = sqlite3.connect(f'/sw/share/compstore/production/statistics/dbs/project_p
 ppcur = ppdb.cursor()
 
 for proj_id in state['projects']:
-    
+
     query = f"INSERT OR REPLACE INTO current_state VALUES (?, ?, ?)"
     ppcur.execute(query, [proj_id, json.dumps(state['projects'][proj_id]), datetime.now().strftime('%Y-%m-%d') ])
 

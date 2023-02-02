@@ -9,7 +9,7 @@ import sqlite3
 from pprint import pprint
 from datetime import datetime, timedelta
 import logging
-
+import glob
 
 
 
@@ -21,7 +21,7 @@ import logging
 
 # configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
     datefmt="%d/%b/%Y %H:%M:%S",
     stream=sys.stdout)
@@ -65,7 +65,7 @@ def main():
 
     # load data from database
     db_file = '/sw/share/compstore/production/statistics/dbs/project_portal.sqlite'
-    logging.info(f"Fetching jobs from database ({db_file})")
+    logging.info(f"Fetching project data from database ({db_file})")
     db = sqlite3.connect(db_file)
     db.row_factory = sqlite3.Row
     cur = db.cursor()
@@ -87,9 +87,9 @@ def main():
 #            pdb.set_trace()
 
         # skip projects that are more than 1 year since expiry date
-        if project['data']['End'] < too_old_date:
-            logging.debug(f"Skipping old project {proj_id}, expired {project['data']['End']}.")
-            continue
+#        if project['data']['End'] < too_old_date:
+#            logging.debug(f"Skipping old project {proj_id}, expired {project['data']['End']}.")
+#            continue
 
         # init
         project_stats[proj_id] = {'fs_exts':{}, 'fs_years':{}, 'fs_locations':{}, 'storage_size':0, 'storage_freq':0, 'ch_usage':0, 'ch_eff':0, 'user':{} }
@@ -97,9 +97,22 @@ def main():
             project_stats[proj_id]['user'][user['Username']] = {'fs_exts':{}, 'fs_years':{}, 'fs_locations':{}, 'storage_size':0, 'storage_freq':0, 'ch_usage':0, 'ch_eff':0 } 
 
 
+
+
+
+
+#  _____ ___ _     _____ ____ ___ __________
+# |  ___|_ _| |   | ____/ ___|_ _|__  / ____|
+# | |_   | || |   |  _| \___ \| |  / /|  _|
+# |  _|  | || |___| |___ ___) | | / /_| |___
+# |_|   |___|_____|_____|____/___/____|_____|
+#
+# FILESIZE
+
         # check if project has filesize stats
         if 'filesize' in project['data'] and len(project['data']['filesize']) > 0:
 
+            logging.debug("Processing filesize key")
 #            pdb.set_trace()
             # save ext info for project
             project_stats[proj_id]['fs_exts']      = project['data']['filesize']['project']['exts']
@@ -128,9 +141,20 @@ def main():
 
 
 
-            logging.debug("Processing filesize key")
 
 
+
+
+
+
+
+#  ____ _____ ___  ____      _    ____ _____
+# / ___|_   _/ _ \|  _ \    / \  / ___| ____|
+# \___ \ | || | | | |_) |  / _ \| |  _|  _|
+#  ___) || || |_| |  _ <  / ___ \ |_| | |___
+# |____/ |_| \___/|_| \_\/_/   \_\____|_____|
+#
+# STORAGE
 
         if 'storage' in project['data']:
 
@@ -151,6 +175,18 @@ def main():
                 logging.warning(f"{proj_id} has more than 1 storage system defined in SAMS data. This is not handled yet, so now is probably a good time to implement it.")
 
 
+
+
+
+
+
+#   ____ ___  ____  _____ _   _  ___  _   _ ____  ____
+#  / ___/ _ \|  _ \| ____| | | |/ _ \| | | |  _ \/ ___|
+# | |  | | | | |_) |  _| | |_| | | | | | | | |_) \___ \
+# | |__| |_| |  _ <| |___|  _  | |_| | |_| |  _ < ___) |
+#  \____\___/|_| \_\_____|_| |_|\___/ \___/|_| \_\____/
+#
+# COREHOURS
 
         if 'corehours' in project['data']:
 
@@ -208,7 +244,13 @@ def main():
 
 
 
-
+#  ____  _____ _   _ ____  _____ ____
+# |  _ \| ____| \ | |  _ \| ____|  _ \
+# | |_) |  _| |  \| | | | |  _| | |_) |
+# |  _ <| |___| |\  | |_| | |___|  _ <
+# |_| \_\_____|_| \_|____/|_____|_| \_\
+#
+# RENDER
 
     # render the main page
     logging.info(f"Rendering main page")
@@ -218,6 +260,9 @@ def main():
     logging.info("Rendering project pages")
     for proj in project_stats:
         render_project_page(proj)
+
+        for user in project_stats[proj]['user']:
+            render_project_user_page(proj, user)
 
 
 
@@ -238,7 +283,10 @@ def render_page(template_name, output_file, data=None):
     Function to render html and write to an output file.
     """
     # create template
-    template = environment.get_template(template_name)
+    try:
+        template = environment.get_template(template_name)
+    except:
+        pdb.set_trace()
 
     # vars
 
@@ -272,12 +320,16 @@ def render_main_page():
     """
     Function to render the main page.
     """
+    
+    # fetch all png files in folder
+    plot_files = list(map(os.path.basename, glob.glob(f"{web_root}/*.png")))
+    
     # create data object
     data = {'title' : "UPPMAX Project Portal",
             'web_root' : ".",
             'image_prefix' : "projects/all_projects",
             'project_stats' : project_stats,
-            'plot_suffixes' : main_page_plot_suffixes,
+            'plot_files' : plot_files,
            }
 
     render_page("main_page.html", f"{web_root}/index.html", data)
@@ -295,19 +347,9 @@ def render_project_page(proj_id):
 
     # create project folder if not existing
     os.makedirs(f"{web_root}/projects/{proj_id}", exist_ok=True)
-
-#    # Sum all exts to get disk usage per user and total project size
-#    user_size = {}
-#    project_size = 1 # to avoid division by zero later on
-#    for user in projects[proj_id]:
-#
-#        # init
-#        user_size[user] = 0
-#
-#        # get all ext sizes TODO: will location give the same answer? less work to add 2 numbers :)
-#        for size, freq in projects[proj_id][user]['exts'].values():
-#            user_size[user] += size
-#            project_size += size
+    
+    # fetch all png files in folder
+    plot_files = list(map(os.path.basename, glob.glob(f"{web_root}/projects/{proj_id}/*.png")))
 
     # create data object
     data = {'title' : "UPPMAX Project Portal",
@@ -315,11 +357,40 @@ def render_project_page(proj_id):
             'web_root' : "../../",
             'subtitle' : f' - {proj_id}',
             'project_data' : project_stats[proj_id],
-            'plot_suffixes' : project_page_plot_suffixes,
+            'plot_files' : plot_files,
            }
 
-    os.makedirs(f"{web_root}/projects/{proj_id}", exist_ok=True)
+
     render_page("project_page.html", f"{web_root}/projects/{proj_id}/index.html", data)
+
+
+
+
+
+def render_project_user_page(proj_id, user):
+    """
+    Function to render a project's user page.
+    """
+
+    logging.debug(f"Rendering {proj_id}-{user} page")
+
+    # create project folder if not existing
+    os.makedirs(f"{web_root}/projects/{proj_id}/{user}", exist_ok=True)
+    
+    # fetch all png files in folder
+    plot_files = list(map(os.path.basename, glob.glob(f"{web_root}/projects/{proj_id}/{user}/*.png")))
+
+    # create data object
+    data = {'title' : "UPPMAX Project Portal",
+            'proj_id' : proj_id,
+            'web_root' : "../../../",
+            'subtitle' : f' - {proj_id} - {user}',
+            'user_data' : project_stats[proj_id]['user'][user],
+            'plot_files' : plot_files,
+           }
+
+
+    render_page("project_user_page.html", f"{web_root}/projects/{proj_id}/{user}/index.html", data)
 
 
 def human_readable_size(num, suffix="B"):
